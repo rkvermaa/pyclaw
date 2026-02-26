@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 DEFAULT_CONFIG_DIR = Path.home() / ".pyclaw"
 DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_DIR / "config.json"
+DEFAULT_ENV_PATH = DEFAULT_CONFIG_DIR / ".env"
 DEFAULT_WORKSPACE = DEFAULT_CONFIG_DIR / "workspace"
 
 

@@ -5,17 +5,76 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+import pyfiglet
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 app = typer.Typer(
     name="pyclaw",
     help="PyClaw - Python personal AI assistant built on LangChain Deep Agents",
-    no_args_is_help=True,
+    invoke_without_command=True,
 )
 console = Console()
+
+_GRADIENT = ["bright_cyan", "cyan", "dodger_blue", "blue_violet", "magenta", "bright_magenta"]
+
+
+def _make_banner(subtitle: str, border_style: str = "bold blue") -> Panel:
+    """Build a colorful PyClaw banner panel with gradient text."""
+    banner = pyfiglet.figlet_format("PyClaw", font="ansi_shadow")
+    text = Text()
+    for i, line in enumerate(banner.rstrip().split("\n")):
+        text.append(line + "\n", style=f"bold {_GRADIENT[i % len(_GRADIENT)]}")
+    text.append(f"\n  {subtitle}", style="dim white")
+    return Panel(text, style=border_style, padding=(1, 2))
+
+
+@app.callback()
+def main(
+    ctx: typer.Context,
+    message: Optional[str] = typer.Option(None, "-m", "--message", help="One-shot message (skip interactive mode)"),
+    thread: Optional[str] = typer.Option(None, "-t", "--thread", help="Thread ID for session continuity"),
+    model: Optional[str] = typer.Option(None, "--model", help="Override default model (e.g. 'openai:gpt-4o')"),
+):
+    """PyClaw - Python personal AI assistant built on LangChain Deep Agents."""
+    if ctx.invoked_subcommand is not None:
+        return
+
+    from pyclaw.config import DEFAULT_CONFIG_PATH, DEFAULT_ENV_PATH, load_config
+
+    # Auto-redirect to onboarding if not set up yet or setup was incomplete
+    needs_onboarding = not DEFAULT_CONFIG_PATH.exists()
+    if not needs_onboarding:
+        # Check if the chosen model needs an API key but .env is missing/empty
+        cfg = load_config()
+        provider = cfg.default_model.split(":")[0] if ":" in cfg.default_model else cfg.default_model
+        needs_api_key = provider not in ("ollama",)
+        if needs_api_key and not DEFAULT_ENV_PATH.exists():
+            needs_onboarding = True
+
+    if needs_onboarding:
+        console.print("[yellow]PyClaw is not set up yet. Starting onboarding...[/yellow]")
+        console.print()
+        onboard()
+        console.print()
+
+    from pyclaw.agent import create_pyclaw_agent
+    from pyclaw.sessions.manager import get_default_thread_id
+
+    config = load_config()
+    if model:
+        config.default_model = model
+
+    agent_graph, checkpointer = create_pyclaw_agent(config)
+    thread_id = thread or get_default_thread_id()
+
+    if message:
+        _run_one_shot(agent_graph, thread_id, message)
+    else:
+        _run_interactive(agent_graph, thread_id)
 
 
 @app.command()
@@ -23,19 +82,18 @@ def onboard():
     """Initialize PyClaw: create config and workspace with template files."""
     from pyclaw.config import (
         DEFAULT_CONFIG_PATH,
+        DEFAULT_ENV_PATH,
         PyClawConfig,
+        load_config,
         save_config,
     )
     from pyclaw.workspace import init_workspace
 
-    console.print(Panel("Welcome to PyClaw!", style="bold blue"))
+    console.print(_make_banner("Python personal AI assistant", "bold blue"))
 
     # Create config
     if DEFAULT_CONFIG_PATH.exists():
         console.print(f"[yellow]Config already exists at {DEFAULT_CONFIG_PATH}[/yellow]")
-        config_data = DEFAULT_CONFIG_PATH.read_text(encoding="utf-8")
-        from pyclaw.config import load_config
-
         config = load_config()
     else:
         config = PyClawConfig()
@@ -53,12 +111,59 @@ def onboard():
     else:
         console.print(f"[yellow]Workspace already initialized at {workspace_path}[/yellow]")
 
+    # Interactive model provider selection
+    console.print()
+    console.print("[bold]Choose your default model provider:[/bold]")
+    console.print("  1. OpenAI (gpt-4o)")
+    console.print("  2. Anthropic (claude-sonnet-4-5-20250929)")
+    console.print("  3. Google Gemini (gemini-2.0-flash)")
+    console.print("  4. Ollama (llama3.2 - local, no API key needed)")
+    console.print()
+
+    providers = {
+        "1": ("openai:gpt-4o", "OPENAI_API_KEY", "OpenAI"),
+        "2": ("anthropic:claude-sonnet-4-5-20250929", "ANTHROPIC_API_KEY", "Anthropic"),
+        "3": ("google_genai:gemini-2.0-flash", "GOOGLE_API_KEY", "Google Gemini"),
+        "4": ("ollama:llama3.2", None, "Ollama"),
+    }
+
+    choice = typer.prompt("Selection", default="1")
+    if choice not in providers:
+        console.print(f"[yellow]Invalid choice '{choice}', defaulting to 1 (OpenAI)[/yellow]")
+        choice = "1"
+
+    model_id, api_key_env, provider_name = providers[choice]
+    config.default_model = model_id
+    save_config(config)
+    console.print(f"[green]Default model set to {model_id}[/green]")
+
+    # Ask for API key if needed
+    if api_key_env:
+        console.print()
+        api_key = typer.prompt(f"Enter your {provider_name} API key", default="", hide_input=False)
+        if api_key:
+            DEFAULT_ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
+            # Read existing env lines (if any), update or append
+            existing_lines: list[str] = []
+            if DEFAULT_ENV_PATH.exists():
+                existing_lines = DEFAULT_ENV_PATH.read_text(encoding="utf-8").splitlines()
+            updated = False
+            for i, line in enumerate(existing_lines):
+                if line.strip().startswith(f"{api_key_env}="):
+                    existing_lines[i] = f"{api_key_env}={api_key}"
+                    updated = True
+                    break
+            if not updated:
+                existing_lines.append(f"{api_key_env}={api_key}")
+            DEFAULT_ENV_PATH.write_text("\n".join(existing_lines) + "\n", encoding="utf-8")
+            console.print(f"[green]API key saved to {DEFAULT_ENV_PATH}[/green]")
+        else:
+            console.print(f"[yellow]No API key entered. Set {api_key_env} in your environment or in {DEFAULT_ENV_PATH} later.[/yellow]")
+
     console.print()
     console.print("[bold]Next steps:[/bold]")
-    console.print("  1. Edit ~/.pyclaw/config.json to set your preferred model and API keys")
-    console.print("  2. Edit workspace .md files to customize your assistant's personality")
-    console.print("  3. Run [bold]pyclaw agent[/bold] to start chatting")
-    console.print("  4. Run [bold]pyclaw agent -m 'your question'[/bold] for one-shot mode")
+    console.print("  - Edit workspace .md files to customize your assistant")
+    console.print("  - Run [bold]pyclaw[/bold] to start chatting")
 
 
 @app.command()
@@ -108,7 +213,7 @@ def _run_one_shot(agent_graph, thread_id: str, message: str):
 
 def _run_interactive(agent_graph, thread_id: str):
     """Run the interactive REPL loop."""
-    console.print(Panel("PyClaw Interactive Mode", style="bold green"))
+    console.print(_make_banner("Interactive Mode", "bold green"))
     console.print(f"[dim]Thread: {thread_id}[/dim]")
     console.print("[dim]Type 'exit' or 'quit' to leave. Ctrl+C to interrupt.[/dim]")
     console.print()
