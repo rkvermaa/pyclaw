@@ -1,11 +1,16 @@
-# PyClaw
+<p align="center">
+  <img src="assets/banner.png" alt="PyClaw" width="700" />
+</p>
 
-**Python personal AI assistant. Self-hosted. Open-source.**
+<p align="center">
+  <strong>Python personal AI assistant. Self-hosted. Open-source.</strong><br>
+  CLI + Telegram + Discord + Slack.<br>
+  Remembers you. Learns your ways. Plans and acts.
+</p>
 
-CLI + Telegram + Discord + Slack.
-Remembers you. Learns your ways. Plans and acts.
-
-Built on [LangChain Deep Agents SDK](https://github.com/langchain-ai/deepagents).
+<p align="center">
+  Built on <a href="https://github.com/langchain-ai/deepagents">LangChain Deep Agents SDK</a>
+</p>
 
 ---
 
