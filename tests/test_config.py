@@ -11,7 +11,10 @@ def test_default_config():
     """Default config should have sensible defaults."""
     config = PyClawConfig()
     assert config.default_model == "openai:gpt-4o"
-    assert len(config.model_list) == 3
+    assert len(config.model_list) == 4
+    # DeepSeek provider should be 'deepseek' (not 'openai')
+    ds = next(m for m in config.model_list if m.name == "deepseek")
+    assert ds.provider == "deepseek"
     assert config.tools.web_search.enabled is True
     assert config.tools.shell_exec.enabled is True
     assert config.heartbeat.enabled is False

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import TYPE_CHECKING
 
@@ -64,7 +65,7 @@ class DiscordChannel(BaseChannel):
                 return
 
             user_id = str(message.author.id)
-            response = self.handle_incoming(user_id, content)
+            response = await asyncio.to_thread(self.handle_incoming, user_id, content)
 
             # Discord has a 2000 char limit
             if len(response) > 2000:
@@ -78,6 +79,8 @@ class DiscordChannel(BaseChannel):
     def stop(self) -> None:
         """Stop the Discord bot."""
         if self._client:
-            import asyncio
-
-            asyncio.run(self._client.close())
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._client.close())
+            except RuntimeError:
+                asyncio.run(self._client.close())

@@ -15,6 +15,10 @@ class BaseChannel(ABC):
     def __init__(self, config: PyClawConfig):
         self.config = config
 
+        from pyclaw.agent import create_pyclaw_agent
+
+        self._agent, self._checkpointer = create_pyclaw_agent(config)
+
     @abstractmethod
     def start(self) -> None:
         """Start the channel gateway. This should block."""
@@ -30,15 +34,12 @@ class BaseChannel(ABC):
 
         Returns the agent's response text.
         """
-        from pyclaw.agent import create_pyclaw_agent
         from pyclaw.sessions.manager import get_channel_thread_id
 
         channel_name = self.__class__.__name__.replace("Channel", "").lower()
         thread_id = get_channel_thread_id(channel_name, user_id)
 
-        agent, checkpointer = create_pyclaw_agent(self.config)
-
-        result = agent.invoke(
+        result = self._agent.invoke(
             {"messages": [{"role": "user", "content": message}]},
             config={"configurable": {"thread_id": thread_id}},
         )

@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from langchain_core.tools import tool
 
 if TYPE_CHECKING:
     from pyclaw.config import PyClawConfig
+
+
+def _run_async(coro):
+    """Run a coroutine, handling the case where an event loop is already running."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    else:
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return pool.submit(asyncio.run, coro).result()
 
 
 def build_message_tool(config: PyClawConfig):
@@ -39,9 +53,7 @@ def build_message_tool(config: PyClawConfig):
                 if not token:
                     return f"Telegram token not set ({config.channels.telegram.token_env})."
                 bot = telegram.Bot(token=token)
-                import asyncio
-
-                asyncio.run(bot.send_message(chat_id=user_id, text=message))
+                _run_async(bot.send_message(chat_id=user_id, text=message))
                 return f"Message sent to Telegram user {user_id}."
             except ImportError:
                 return "python-telegram-bot not installed."

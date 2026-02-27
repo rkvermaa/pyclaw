@@ -24,10 +24,9 @@ if TYPE_CHECKING:
 
 def _load_env_file(path: os.PathLike) -> None:
     """Load key=value pairs from a file into os.environ (no extra dependency)."""
-    env_path = type(path)(path) if not hasattr(path, "exists") else path
     from pathlib import Path
 
-    env_path = Path(env_path)
+    env_path = Path(path)
     if not env_path.exists():
         return
     for line in env_path.read_text(encoding="utf-8").splitlines():
@@ -52,8 +51,22 @@ def create_pyclaw_agent(config: PyClawConfig) -> tuple[CompiledStateGraph, Sqlit
     # Load env vars from ~/.pyclaw/.env (API keys, etc.)
     _load_env_file(DEFAULT_ENV_PATH)
 
-    # Initialize the LLM
-    model = init_chat_model(config.default_model)
+    # Initialize the LLM — resolve provider from registry for base_url support
+    from pyclaw.models import load_model_registry
+
+    registry = load_model_registry()
+    provider_def, model_id = registry.get_provider_for_model_string(config.default_model)
+
+    if provider_def is not None:
+        # Build the langchain model string (e.g. "openai:deepseek-chat")
+        langchain_model = f"{provider_def.langchain_provider}:{model_id}"
+        kwargs: dict[str, str] = {}
+        if provider_def.base_url:
+            kwargs["base_url"] = provider_def.base_url
+        model = init_chat_model(langchain_model, **kwargs)
+    else:
+        # Fallback: pass the string as-is (backward compat)
+        model = init_chat_model(config.default_model)
 
     # Build custom tools
     custom_tools = build_tools(config)

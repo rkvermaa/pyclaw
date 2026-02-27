@@ -17,6 +17,7 @@ class SlackChannel(BaseChannel):
     def __init__(self, config: PyClawConfig):
         super().__init__(config)
         self._app = None
+        self._handler = None
         self._token = os.environ.get(config.channels.slack.token_env, "")
 
     def start(self) -> None:
@@ -66,9 +67,10 @@ class SlackChannel(BaseChannel):
                 response = self.handle_incoming(user_id, text)
                 say(response)
 
-        handler = SocketModeHandler(self._app, app_token)
-        handler.start()
+        self._handler = SocketModeHandler(self._app, app_token)
+        self._handler.start()
 
     def stop(self) -> None:
         """Stop the Slack bot."""
-        pass
+        if self._handler:
+            self._handler.close()

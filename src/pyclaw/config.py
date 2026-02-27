@@ -81,6 +81,13 @@ class PyClawConfig(BaseModel):
             api_key_env="ANTHROPIC_API_KEY",
         ),
         ModelEntry(
+            name="deepseek",
+            provider="deepseek",
+            model="deepseek-chat",
+            api_key_env="DEEPSEEK_API_KEY",
+            base_url="https://api.deepseek.com",
+        ),
+        ModelEntry(
             name="local-llama",
             provider="ollama",
             model="llama3.2",

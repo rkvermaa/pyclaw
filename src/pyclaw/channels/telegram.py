@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import TYPE_CHECKING
 
@@ -53,7 +54,9 @@ class TelegramChannel(BaseChannel):
                 await update.message.reply_text("Unauthorized.")
                 return
 
-            response = self.handle_incoming(user_id, update.message.text)
+            response = await asyncio.to_thread(
+                self.handle_incoming, user_id, update.message.text
+            )
             await update.message.reply_text(response)
 
         async def handle_start(update: Update, context):
